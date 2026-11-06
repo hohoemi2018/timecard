@@ -383,6 +383,11 @@ span.cellbtn{cursor:default}
 .tc-src{display:block;font-size:11px;color:var(--muted);white-space:nowrap}
 .tc-pd{display:block;font-size:12px;font-weight:500;color:var(--muted);white-space:normal;max-width:16em;margin-left:auto}
 .tc-brk-note{font-size:12px;color:var(--muted)}
+.tc-snap{display:block;font-size:11px;font-weight:700;color:var(--n-fg);line-height:1.3}
+.tc-snap:empty{display:none}
+.tc-snaprule{margin-top:14px;margin-bottom:10px;gap:8px}
+.tc-snaprule>.lab{font-size:15px;color:var(--ink)}
+.tc-snaprule select{min-height:40px}
 .tctable select{min-height:36px;padding:2px 6px;font-size:14px}
 .tctable select.on{background:var(--p-bg);color:var(--p-fg);border-color:transparent;font-weight:700}
 .tc-brkpick{display:flex;flex-direction:column;align-items:center;gap:8px;background:var(--paper-2);border-radius:18px;padding:12px 16px;max-width:100%}
@@ -526,6 +531,7 @@ span.cellbtn{cursor:default}
 .ts-sum b{font-size:16px;color:var(--ink)}
 .ts-sum span{font-size:10.5px;color:var(--muted);white-space:normal;line-height:1.3}
 .pg-foot{display:flex;justify-content:space-between;gap:12px;font-size:11px;color:var(--muted)}
+.pg-foot span:last-child{white-space:nowrap;flex:none}
 .pg .bunting{max-width:460px}
 .pg .psheet{max-width:none}
 .pg .pday{min-height:124px;gap:4px;padding-top:8px}
@@ -1026,6 +1032,8 @@ const uid=()=>'s'+Math.random().toString(36).slice(2,8)+Date.now().toString(36).
 const fmtT=t=>{if(!t) return '';const p=String(t).split(':');return Number(p[0])+':'+(p[1]||'00');};
 const clampInt=(v,lo,hi)=>{let x=parseInt(v,10);if(isNaN(x)) x=Number(lo)||0;if(lo!==''&&lo!=null) x=Math.max(Number(lo),x);if(hi!==''&&hi!=null) x=Math.min(Number(hi),x);return x;};
 
+/* 出勤・退勤を予定の時刻にそろえるときの「○分前から」（normalize で使うので、load より前に置く） */
+const SNAP_OPTS=[5,10,15];
 function load(){
   try{
     const raw=localStorage.getItem(KEY);if(!raw) return null;
@@ -1037,7 +1045,7 @@ function defPat(){return {1:'N',2:'N',3:'N',4:'N',5:'N',6:'',0:''};}
 function normalize(s){
   if(!s||s.v!==1||!Array.isArray(s.staff)||!s.shifts||!s.ym) return null;
   s.facility=s.facility||{name:''};s.dayOverride=s.dayOverride||{};s.wishes=s.wishes||{};s.schedules=s.schedules||{};
-  s.rules=s.rules||{maxConsec:5,noLateEarly:true,wishLimit:3};s.mode=s.mode==='staff'?'staff':'admin';s.tc=s.tc||{breakMin:60,breakAfterH:6};s.tcSnap=s.tcSnap||{};s.punchAt=s.punchAt||0;if(!s.punches){s.punches=(s.sample&&HAS_TC)?samplePunches(s):{};if(s.sample&&HAS_TC&&!s.reqs) s.reqs=sampleReqs(s);}s.reqs=s.reqs||[];s.genMode=s.genMode||'auto';if(s.fillSubs==null) s.fillSubs=true;s.lv=1;s.paid=s.paid||{};s.pin=s.pin||'';s.rc=s.rc||'';s.rcAt=s.rcAt||0;s.pinReq=s.pinReq||null;s.wishClosed=s.wishClosed||{};s.openDows=s.openDows||[1,2,3,4,5,6];
+  s.rules=s.rules||{maxConsec:5,noLateEarly:true,wishLimit:3};s.mode=s.mode==='staff'?'staff':'admin';s.tc=s.tc||{breakMin:60,breakAfterH:6};if(s.tc.snap==null) s.tc.snap=0;if(SNAP_OPTS.indexOf(Number(s.tc.snapM))<0) s.tc.snapM=15;s.tcSnap=s.tcSnap||{};s.punchAt=s.punchAt||0;if(!s.punches){s.punches=(s.sample&&HAS_TC)?samplePunches(s):{};if(s.sample&&HAS_TC&&!s.reqs) s.reqs=sampleReqs(s);}s.reqs=s.reqs||[];s.genMode=s.genMode||'auto';if(s.fillSubs==null) s.fillSubs=true;s.lv=1;s.paid=s.paid||{};s.pin=s.pin||'';s.rc=s.rc||'';s.rcAt=s.rcAt||0;s.pinReq=s.pinReq||null;s.wishClosed=s.wishClosed||{};s.openDows=s.openDows||[1,2,3,4,5,6];
   normShifts(s);
   s.staff.forEach(p=>{p.can=p.can||{E:true,N:true,L:true};s.shiftIds.forEach(k=>{if(p.can[k]==null) p.can[k]=true;});p.dows=p.dows||[0,1,2,3,4,5,6];if(p.off==null) p.off=9;if(p.work==null) p.work=12;if(!p.pat) p.pat=defPat();if(!Array.isArray(p.quals)) p.quals=[];if(!p.hrs) p.hrs={on:false,start:'09:00',end:'13:00'};
     if(!Array.isArray(p.hrs.alt)) p.hrs.alt=[];p.hrs.alt=p.hrs.alt.filter(b=>b&&typeof b==='object').slice(0,HRS_MAX-1);p.hrs.alt.forEach(b=>{if(!Array.isArray(b.dows)) b.dows=[];});});if(!Array.isArray(s.qualList)) s.qualList=defQuals();s.qualList.forEach(q=>{if(q.wkAM==null){q.wkAM=q.wkPM=Number(q.wk)||0;q.weAM=q.wePM=Number(q.we)||0;}});if(!s.noon) s.noon='12:00';
@@ -1045,11 +1053,11 @@ function normalize(s){
   return s;
 }
 function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}}
-function touch(){const sc=S.schedules[S.ym];if(sc) sc.stale=true;save();}
+function touch(){const sc=S.schedules[S.ym];if(sc) sc.stale=true;if(HAS_TC&&S.tc&&S.tc.snap) S.punchAt=Date.now();save();}
 
 function blank(){
   const now=new Date();const nx=new Date(now.getFullYear(),now.getMonth()+1,1);
-  return {v:1,lv:1,kk:{svc:'jh',cap:'',wh:40,per:'m'},sample:false,mode:'admin',paid:{},pin:'',rc:'',rcAt:0,pinReq:null,wishClosed:{},qualList:defQuals(),noon:'12:00',reqs:[],genMode:'auto',fillSubs:true,punches:{},tc:{breakMin:60,breakAfterH:6},tcSnap:{},punchAt:0,view:'joken',facility:{name:''},ym:nx.getFullYear()+'-'+pad(nx.getMonth()+1),
+  return {v:1,lv:1,kk:{svc:'jh',cap:'',wh:40,per:'m'},sample:false,mode:'admin',paid:{},pin:'',rc:'',rcAt:0,pinReq:null,wishClosed:{},qualList:defQuals(),noon:'12:00',reqs:[],genMode:'auto',fillSubs:true,punches:{},tc:{breakMin:60,breakAfterH:6,snap:0,snapM:15},tcSnap:{},punchAt:0,view:'joken',facility:{name:''},ym:nx.getFullYear()+'-'+pad(nx.getMonth()+1),
     shifts:{E:{name:'早番',ab:'早',abAuto:true,col:0,start:'07:00',end:'16:00',wk:2,we:1},N:{name:'通常',ab:'通',abAuto:true,col:1,start:'08:30',end:'17:30',wk:2,we:1},L:{name:'遅番',ab:'遅',abAuto:true,col:2,start:'10:00',end:'19:00',wk:2,we:1}},shiftIds:['E','N','L'],
     openDows:[1,2,3,4,5,6],closeHolidays:true,dayOverride:{},rules:{maxConsec:5,noLateEarly:true,wishLimit:3},
     staff:[],wishes:{},schedules:{}};
@@ -1607,11 +1615,11 @@ function viewShokuinTC(){
     return '<article class="staff"><div class="st-head">'
       +'<input type="text" id="sn-'+id+'" data-chg="sf" data-k="name" data-sid="'+id+'" value="'+esc(s.name)+'" placeholder="なまえ" aria-label="なまえ">'
       +'<button type="button" class="iconbtn" data-act="askdel" data-v="'+id+'" aria-label="'+esc(s.name)+'さんを削除">×</button></div>'
-      +brkRow(s)+kkRow(s)
+      +brkRow(s)+tcHrsRow(s)+kkRow(s)
       +(UI.confirmDel===id?'<div class="delask"><span>この職員を削除しますか？タイムカードの記録も消えます。</span><button type="button" class="btn" data-act="delstaff" data-v="'+id+'">削除する</button><button type="button" class="btn quiet" data-act="askdel" data-v="">やめる</button></div>':'')
       +'</article>';}).join('');
   return '<div class="panel"><section><h2>職員の登録</h2>'
-    +'<p class="hint">タイムカードを使う職員の名前を登録してください。職員用の画面では、この名前の中から自分を選びます。休憩が事業所の基本とちがう人は「ふだんの休憩」をえらびます（日によってちがうときは、退勤のときに職員がえらべます）。</p>'
+    +'<p class="hint">タイムカードを使う職員の名前を登録してください。職員用の画面では、この名前の中から自分を選びます。休憩が事業所の基本とちがう人は「ふだんの休憩」をえらびます（日によってちがうときは、退勤のときに職員がえらべます）。「ふだんの勤務時間」は、タイムカードで出勤・退勤を「予定の時刻にそろえる」ときに使います。</p>'
     +(S.staff.length?'<div class="stafflist">'+cards+'</div>':'<div class="empty">'+chick()+'<p>まだ職員が登録されていません。下のボタンから1人ずつ追加してください。</p></div>')
     +'<div class="row"><button type="button" class="btn" data-act="addstaff">＋ 職員を追加</button></div></section>'
     +'<div class="next"><button type="button" class="btn primary" data-act="go" data-v="tc">つぎへ　タイムカードを見る</button></div></div>';
@@ -1634,6 +1642,22 @@ function bandsLabel(n){return n>1?'時間2〜'+(n+1):'時間2';}
 function hrsRow(s){
   const id=s.id;const on=!!(s.hrs&&s.hrs.on);const alt=on?(s.hrs.alt||[]):[];
   let h='<div class="st-row"><span class="lab">勤務時間</span><div class="hrsrow"><label class="chk"><input type="checkbox" id="sh-'+id+'-on" data-chg="sf" data-k="hrson" data-sid="'+id+'"'+(ownHrs(s)?' checked':'')+'><span>この人だけの時間にする</span></label>'+(on?'':'<span class="hint">シフトの時間で働きます</span>')+'</div>';
+  h+=bandsHTML(s);
+  h+='<span class="st-note" id="hn-'+id+'">'+hrsNote(s)+'</span>'
+    +(alt.length?'<span class="st-note">'+bandsLabel(alt.length)+'は、えらんだ曜日に使います。曜日をえらばなかった時間は、④勤務表のマスをタップして、日ごとにえらべます。</span>':'');
+  return h+'</div>';
+}
+/* タイムカードだけのアプリ：職員の「ふだんの勤務時間」（出勤・退勤を予定の時刻にそろえるときに使う。勤務表アプリと同じ s.hrs） */
+function tcHrsRow(s){
+  const id=s.id;const on=!!(s.hrs&&s.hrs.on);const alt=on?(s.hrs.alt||[]):[];
+  return '<div class="st-row"><span class="lab">ふだんの勤務時間</span><div class="hrsrow"><label class="chk"><input type="checkbox" id="sh-'+id+'-on" data-chg="sf" data-k="hrson" data-sid="'+id+'"'+(on?' checked':'')+'><span>決める</span></label>'
+    +(on?'':'<span class="hint">タイムカードで「予定の時刻にそろえる」を使うときに決めます</span>')+'</div>'
+    +bandsHTML(s)
+    +(alt.length?'<span class="st-note">'+bandsLabel(alt.length)+'は、えらんだ曜日に使います。</span>':'')+'</div>';
+}
+/* 時間1〜5の入力欄（勤務表アプリとタイムカードだけのアプリで共通） */
+function bandsHTML(s){
+  const id=s.id;const on=!!(s.hrs&&s.hrs.on);const alt=on?(s.hrs.alt||[]):[];let h='';
   if(on){
     h+='<div class="bands">'
       +'<div class="band"><span class="bnum">時間1</span><input type="time" id="sh-'+id+'-st" aria-label="時間1のはじまり" data-chg="sf" data-k="hrsst" data-sid="'+id+'" value="'+esc(s.hrs.start)+'"><span>〜</span><input type="time" id="sh-'+id+'-en" aria-label="時間1のおわり" data-chg="sf" data-k="hrsen" data-sid="'+id+'" value="'+esc(s.hrs.end)+'">'
@@ -1644,9 +1668,7 @@ function hrsRow(s){
       +(alt.length<HRS_MAX-1?'<div class="row"><button type="button" class="btn sm" data-act="badd" data-s="'+id+'">＋ 時間を足す（'+HRS_MAX+'つまで）</button></div>':'')
       +'</div>';
   }
-  h+='<span class="st-note" id="hn-'+id+'">'+hrsNote(s)+'</span>'
-    +(alt.length?'<span class="st-note">'+bandsLabel(alt.length)+'は、えらんだ曜日に使います。曜日をえらばなかった時間は、④勤務表のマスをタップして、日ごとにえらべます。</span>':'');
-  return h+'</div>';
+  return h;
 }
 function viewShokuin(){
   if(!HAS_ROSTER) return viewShokuinTC();
@@ -1946,11 +1968,38 @@ const BRK_OPTS=[0,30,45,60,90,120];
 function fmtBrk(m){m=Number(m)||0;if(!m) return 'なし';const h=Math.floor(m/60),mm=m%60;return h?(h+'時間'+(mm?mm+'分':'')):mm+'分';}
 function usualBrk(sid){const s=staffById(sid);return s&&s.brk!=null&&s.brk!==''?Number(s.brk):(Number(S.tc.breakMin)||0);}
 function autoBrk(g,sid){return g>(Number(S.tc.breakAfterH)||0)*60?usualBrk(sid):0;}
-/* 1日の勤務時間＝退勤−出勤−休憩。1分単位で、切り捨てはしない */
-function recMin(r,sid){
-  if(!r||r.i==null||r.o==null) return null;const g=r.o-r.i;if(g<=0) return null;
+/* 出勤・退勤の時刻のそろえ方（S.tc.snap）：0＝押したままの時刻、1＝予定の時刻にそろえる。
+   そろえるときは、予定の始まりの S.tc.snapM 分前〜始まりに押した出勤を始まりの時刻に、予定の終わりの snapM 分前〜終わりに押した退勤を終わりの時刻にする。
+   それより早い出勤・遅刻・残業は押したまま。押した時刻（r.i・r.o）は書きかえず、計算と表示のときだけそろえる */
+function snapM(){return S.tc&&S.tc.snap?(SNAP_OPTS.indexOf(Number(S.tc.snapM))>=0?Number(S.tc.snapM):15):0;}
+/* その日の予定の時刻 [始まり,終わり]（分）。職員ごとの勤務時間（時間1〜5）があればその時間、
+   なければ勤務表のその日の勤務の時刻（合わせたアプリ）。タイムカードだけのアプリは職員の「ふだんの勤務時間」だけ */
+function planSpan(k,sid){
+  const s=staffById(sid);if(!s||!k) return null;const p=k.split('-').map(Number);const d=p[2];
+  let t=null,hk=null;
+  if(HAS_ROSTER){const sc=S.schedules[k.slice(0,7)];t=sc&&sc.cells&&sc.cells[sid]?sc.cells[sid][d]:null;
+    if(t&&sc.hb&&sc.hb[sid]&&sc.hb[sid][d]!=null) hk=Number(sc.hb[sid][d]);}
+  let a=null,b=null;
+  if(ownHrs(s)){const n=(s.hrs.alt||[]).length;const bk=hk!=null&&hk>=0&&hk<=n?hk:bandByDow(s,new Date(p[0],p[1]-1,d).getDay());const bb=bandAt(s,bk);a=hm(bb.start);b=hm(bb.end);}
+  else if(t){const sh=S.shifts[t]||{};a=hm(sh.start);b=hm(sh.end);}
+  if(a==null||b==null) return null;if(b<=a) b+=1440;
+  return [a,b];
+}
+/* 計算に使う出勤・退勤（si・so＝予定の時刻にそろえた） */
+function effIO(r,k,sid){
+  const e={i:r?r.i:null,o:r?r.o:null,si:false,so:false};const m=snapM();if(!m||!r) return e;
+  const sp=planSpan(k,sid);if(!sp) return e;
+  if(e.i!=null&&e.i>=sp[0]-m&&e.i<sp[0]){e.i=sp[0];e.si=true;}
+  if(e.o!=null&&e.o>=sp[1]-m&&e.o<sp[1]){e.o=sp[1];e.so=true;}
+  if(e.i!=null&&e.o!=null&&e.o<=e.i) return {i:r.i,o:r.o,si:false,so:false};
+  return e;
+}
+function snapNote(){const m=snapM();return m?'出勤・退勤は、予定の'+m+'分前から予定の時刻までに押したときは、予定の時刻にしています。':'';}
+/* 1日の勤務時間＝退勤−出勤−休憩。1分単位で、切り捨てはしない（k＝日付。予定の時刻にそろえるときに使う） */
+function recMin(r,sid,k){
+  if(!r||r.i==null||r.o==null) return null;const e=effIO(r,k,sid);const g=e.o-e.i;if(g<=0) return null;
   const brk=r.b!=null?Number(r.b):autoBrk(g,sid);
-  return {gross:g,brk:brk,net:Math.max(0,g-brk),auto:r.b==null};
+  return {gross:g,brk:brk,net:Math.max(0,g-brk),auto:r.b==null,i:e.i,o:e.o,si:e.si,so:e.so};
 }
 /* 有給：タイムカードで入れた有給は S.paid['2026-10-05'][職員のid] = 1（1日）または 0.5（半日）。
    合わせたアプリでは、勤務表の希望休で入れた有給（P＝1日、H＝半日）も使う。
@@ -1965,10 +2014,10 @@ function isOpenToday(k,r){return k===todayKey()&&r&&r.i!=null&&r.o==null;}
 function tcPerson(sid,ym){
   const p=ym.split('-').map(Number);const n=new Date(p[0],p[1],0).getDate();let days=0,min=0,miss=0,paid=0;const rows=[],pd=[];
   for(let d=1;d<=n;d++){
-    const k=keyOf(p[0],p[1],d);const r=(S.punches[k]||{})[sid];const c=recMin(r,sid);const pv=paidOf(k,sid);const rp=rosterPaid(k,sid);
+    const k=keyOf(p[0],p[1],d);const r=(S.punches[k]||{})[sid];const c=recMin(r,sid,k);const pv=paidOf(k,sid);const rp=rosterPaid(k,sid);
     if(r){if(c){days++;min+=c.net;}else if(!isOpenToday(k,r)) miss++;}
     if(pv){paid+=pv;pd.push({d:d,v:pv});}
-    rows.push({d:d,k:k,r:r,c:c,p:pv,rp:rp,rpub:rp?rosterPub(k):false,dow:new Date(p[0],p[1]-1,d).getDay()});
+    rows.push({d:d,k:k,r:r,c:c,e:c?{i:c.i,o:c.o,si:c.si,so:c.so}:effIO(r,k,sid),p:pv,rp:rp,rpub:rp?rosterPub(k):false,dow:new Date(p[0],p[1]-1,d).getDay()});
   }
   return {rows:rows,days:days,min:min,miss:miss,paid:paid,pd:pd};
 }
@@ -2011,7 +2060,7 @@ function markHTML(r){return (r&&r.a?'<span class="tc-ap">本人申請・承認�
 function rqForm(me){
   const q=UI.rq;const day=q.day||todayKey();const r=(S.punches[day]||{})[me.id];
   let opts='',k=todayKey();for(let i=0;i<35;i++){opts+='<option value="'+k+'"'+(k===day?' selected':'')+'>'+dayLabel(k)+'</option>';k=prevKey(k);}
-  const iv=q.iv!=null?q.iv:timeVal(r&&r.i),ov=q.ov!=null?q.ov:timeVal(r&&r.o);const c=recMin(r,me.id);const bv=q.bv!=null?q.bv:'';
+  const iv=q.iv!=null?q.iv:timeVal(r&&r.i),ov=q.ov!=null?q.ov:timeVal(r&&r.o);const c=recMin(r,me.id,day);const bv=q.bv!=null?q.bv:'';
   return '<div class="rqform">'
     +'<label class="fld" for="rq-day"><span>日付</span><select id="rq-day" data-chg="rqday">'+opts+'</select></label>'
     +'<p class="hint">いまの記録：出勤 '+fmtClock(r&&r.i)+'・退勤 '+fmtClock(r&&r.o)+(c?'・休憩 '+fmtBrk(c.brk):'')+'</p>'
@@ -2054,7 +2103,7 @@ function reqAdminSection(){
   const pend=pendingReqs().sort((a,b)=>a.at-b.at);const done=(S.reqs||[]).filter(q=>q.st!=='wait').sort((a,b)=>(b.doneAt||0)-(a.doneAt||0)).slice(0,10);
   const item=(q,act)=>{const s=staffById(q.sid);const r=(S.punches[q.day]||{})[q.sid];
     return '<li><div class="rq-h"><b>'+esc((s&&s.name)||'（削除された職員）')+'</b><span>'+dayLabel(q.day)+'</span><span class="hint">'+esc(q.reason)+(q.note?'：'+esc(q.note):'')+'</span></div>'
-      +'<div class="rq-diff">'+(act?'いまの記録：出勤 '+fmtClock(r&&r.i)+'・退勤 '+fmtClock(r&&r.o)+(recMin(r,q.sid)?'・休憩 '+fmtBrk(recMin(r,q.sid).brk):'')+'<br>':'')+'申請：'+rqText(q)+'</div>'
+      +'<div class="rq-diff">'+(act?'いまの記録：出勤 '+fmtClock(r&&r.i)+'・退勤 '+fmtClock(r&&r.o)+(recMin(r,q.sid,q.day)?'・休憩 '+fmtBrk(recMin(r,q.sid,q.day).brk):'')+'<br>':'')+'申請：'+rqText(q)+'</div>'
       +(act?'<div class="row"><button type="button" class="btn primary" data-act="rqok" data-v="'+q.id+'">承認する</button><button type="button" class="btn" data-act="rqng" data-v="'+q.id+'">見送る</button></div>'
         :'<div><span class="pill '+(q.st==='ok'?'pN':'pO')+'">'+(q.st==='ok'?'承認ずみ':'見送り')+'</span></div>')+'</li>';};
   return (pend.length?'<section class="reqbox"><h2>修正の申請 '+pend.length+'件</h2><p>職員から、打刻もれ・まちがいの申請が届いています。内容を確かめて「承認する」を押すと、記録が直ります。</p><ul class="reqlist">'+pend.map(q=>item(q,true)).join('')+'</ul></section>':'')
@@ -2067,7 +2116,7 @@ function sampleReqs(st){
   return k?[{id:uid(),sid:s1.id,day:k,i:null,o:toMin(st.shifts.N.end)+12,reason:'退勤を押し忘れ',note:'',at:Date.now()-3600000,st:'wait'}]:[];
 }
 function brkPickHTML(P){
-  if(P.kind!=='out') return '';const r=(S.punches[P.rk]||{})[P.sid];const c=recMin(r,P.sid);if(!c) return '';
+  if(P.kind!=='out') return '';const r=(S.punches[P.rk]||{})[P.sid];const c=recMin(r,P.sid,P.rk);if(!c) return '';
   const opts=[0,30,60,90];const u=usualBrk(P.sid);if(opts.indexOf(u)<0) opts.push(u);if(r.b!=null&&opts.indexOf(Number(r.b))<0) opts.push(Number(r.b));opts.sort((a,b)=>a-b);
   return '<div class="tc-brkpick"><p class="lab" id="bp-h">きょうの休憩</p><div class="chips" role="group" aria-labelledby="bp-h">'
     +opts.map(v=>'<button type="button" class="chip" data-act="brkpick" data-v="'+v+'" aria-pressed="'+(c.brk===v)+'">'+fmtBrk(v)+'</button>').join('')+'</div>'
@@ -2094,7 +2143,7 @@ function staffTC(me){
   const canIn=!pr&&!(r&&r.i!=null);const canOut=!(r&&r.o!=null);
   const ym=curYm();const p=tcPerson(me.id,ym);
   const list=p.rows.filter(x=>x.r||x.p).map(x=>'<li><b>'+Number(ym.split('-')[1])+'/'+x.d+'('+DOW[x.dow]+')</b>'
-    +(x.r?'<span>'+fmtClock(x.r.i)+'〜'+fmtClock(x.r.o)+(x.c?'<span class="tc-brk-note">（休憩'+fmtBrk(x.c.brk)+'）</span>':'')+'</span><span>'+(x.c?fmtDur(x.c.net):isOpenToday(x.k,x.r)?'勤務中':'<span class="tc-miss">打刻もれ</span> <button type="button" class="btn quiet" data-act="rqopen" data-v="'+x.k+'">申請する</button>')+markHTML(x.r)+'</span>':'')
+    +(x.r?'<span>'+fmtClock(x.e.i)+'〜'+fmtClock(x.e.o)+(x.c?'<span class="tc-brk-note">（休憩'+fmtBrk(x.c.brk)+'）</span>':'')+'</span><span>'+(x.c?fmtDur(x.c.net):isOpenToday(x.k,x.r)?'勤務中':'<span class="tc-miss">打刻もれ</span> <button type="button" class="btn quiet" data-act="rqopen" data-v="'+x.k+'">申請する</button>')+markHTML(x.r)+'</span>':'')
     +(x.p?'<span class="tc-pl">有給'+(x.p===0.5?'（半日）':'')+'</span>':'')+'</li>').join('');
   return '<section class="tc-punch"><div class="tc-clock" id="tc-clock">'+clockHTML()+'</div><p class="tc-date">'+(d.getMonth()+1)+'月'+d.getDate()+'日（'+DOW[d.getDay()]+'）</p>'
     +'<p class="tc-status">'+status+'</p>'
@@ -2103,6 +2152,7 @@ function staffTC(me){
     +'<p class="hint">押し忘れや押しまちがいは、下の「打刻もれ・まちがいの申請」から申請できます。</p></section>'
     +'<section><h2>'+(d.getMonth()+1)+'月のわたしの記録</h2>'
     +'<p class="sum ok">勤務 '+p.days+'日・合計 '+fmtDur(p.min)+(p.paid?'・有給 '+fmtPaid(p.paid):'')+'</p>'
+    +(list&&snapM()?'<p class="hint">'+snapNote()+'</p>':'')
     +(list?'<ul class="mytc">'+list+'</ul>':'<p class="hint">まだ記録はありません。</p>')+'</section>'
     +rqSection(me);
 }
@@ -2115,17 +2165,20 @@ function tcSummaryRows(ym){
   return rows;
 }
 function tcDetailRows(ym){
-  const rows=[['なまえ','日付','曜日','予定','出勤','退勤','休憩（分）','勤務時間（時:分）','勤務時間（時間）','有給','備考']];
+  /* 予定の時刻にそろえるときは、出勤・退勤の列はそろえた時刻。押した時刻は右の2列に入れる */
+  const sn=snapM()>0;
+  const rows=[['なまえ','日付','曜日','予定','出勤','退勤','休憩（分）','勤務時間（時:分）','勤務時間（時間）','有給','備考'].concat(sn?['押した時刻（出勤）','押した時刻（退勤）']:[])];
   const sc=S.schedules[ym];
   S.staff.forEach(s=>{
     const p=tcPerson(s.id,ym);
     p.rows.forEach(x=>{
       const plan=planOf(sc,s.id,x);
       if(!x.r&&!plan&&!x.p) return;
-      rows.push([s.name||'',ym+'-'+pad(x.d),DOW[x.dow],plan,x.r?fmtClock(x.r.i):'',x.r?fmtClock(x.r.o):'',x.c?x.c.brk:'',x.c?fmtHM(x.c.net):'',x.c?(x.c.net/60).toFixed(2):'',x.p?(x.p===0.5?'半日':'1日'):'',
-        [x.r&&!x.c&&!isOpenToday(x.k,x.r)?'打刻もれ':'',x.r&&x.r.a?'本人申請・承認':'',x.r&&x.r.e?'修正あり':''].filter(Boolean).join('・')]);
+      rows.push([s.name||'',ym+'-'+pad(x.d),DOW[x.dow],plan,x.r?fmtClock(x.e.i):'',x.r?fmtClock(x.e.o):'',x.c?x.c.brk:'',x.c?fmtHM(x.c.net):'',x.c?(x.c.net/60).toFixed(2):'',x.p?(x.p===0.5?'半日':'1日'):'',
+        [x.r&&!x.c&&!isOpenToday(x.k,x.r)?'打刻もれ':'',x.r&&x.r.a?'本人申請・承認':'',x.r&&x.r.e?'修正あり':'',x.e&&(x.e.si||x.e.so)?'予定の時刻にそろえた':''].filter(Boolean).join('・')]
+        .concat(sn?[x.r?fmtClock(x.r.i):'',x.r?fmtClock(x.r.o):'']:[]));
     });
-    rows.push([s.name||'','合計','','','','','',fmtHM(p.min),(p.min/60).toFixed(2),p.paid?fmtPaid(p.paid):'','出勤'+p.days+'日']);
+    rows.push([s.name||'','合計','','','','','',fmtHM(p.min),(p.min/60).toFixed(2),p.paid?fmtPaid(p.paid):'','出勤'+p.days+'日'].concat(sn?['','']:[]));
   });
   if(!HAS_ROSTER) rows.forEach(r=>r.splice(3,1));
   return rows;
@@ -2146,6 +2199,22 @@ function tcPaidHTML(x,sid){
   return '<select id="tcps-'+x.k+'" data-chg="tcpaid" data-day="'+x.k+'" data-sid="'+sid+'" aria-label="'+x.d+'日の有給"'+(x.p?' class="on"':'')+'>'
     +'<option value=""'+(v===''?' selected':'')+'>—</option><option value="1"'+(v==='1'?' selected':'')+'>有給</option><option value="0.5"'+(v==='0.5'?' selected':'')+'>有給（半日）</option></select>';
 }
+/* 出勤・退勤の時刻のそろえ方の設定 */
+function tcSnapRule(){
+  const on=!!S.tc.snap;const m=SNAP_OPTS.indexOf(Number(S.tc.snapM))>=0?Number(S.tc.snapM):15;
+  const where=HAS_ROSTER?'勤務表のその日の勤務の時刻（②職員で「この人だけの時間」を決めた人は、その時間）':'②職員の「ふだんの勤務時間」';
+  return '<div class="st-row tc-snaprule" id="tc-snaprule"><span class="lab" id="tcsn-h">出勤・退勤の時刻</span><div class="chips" role="group" aria-labelledby="tcsn-h">'
+    +'<button type="button" class="chip" data-act="tcsnap" data-v="0" aria-pressed="'+!on+'">押したままの時刻</button>'
+    +'<button type="button" class="chip" data-act="tcsnap" data-v="1" aria-pressed="'+on+'">予定の時刻にそろえる</button></div>'
+    +(on?'<div class="rule"><span>予定の</span><select id="tc-snapm" data-chg="tcsnapm" aria-label="予定の何分前から">'+SNAP_OPTS.map(v=>'<option value="'+v+'"'+(v===m?' selected':'')+'>'+v+'</option>').join('')+'</select><span>分前から予定の時刻までに押したときは、予定の時刻にします</span></div>'
+      +'<p class="hint">例：予定が 9:00〜17:00 で'+m+'分なら、出勤を 9:00 より'+m+'分前〜9:00 に押すと 9:00、退勤を 17:00 より'+m+'分前〜17:00 に押すと 17:00 になります。それより早い出勤・遅刻・17:00 より後の退勤（残業）は、押した時刻のままです。予定の時刻は、'+where+'から取ります。予定がない日は、押したままの時刻です。</p>'
+      +'<p class="hint">押した時刻は消えません。下の「個人の記録」では、押した時刻の下に「→ 9:00（予定）」と出ます。「押したままの時刻」にもどすと、いつでも押した時刻で計算し直します。始業前に準備などの仕事をしているときは、その時間も勤務時間です。その場合は「押したままの時刻」にしてください。</p>'
+      :'<p class="hint">「予定の時刻にそろえる」にすると、予定の時刻の少し前に押した出勤・退勤を、予定の時刻で記録できます（5分・10分・15分から選べます）。</p>')
+    +'</div>';
+}
+/* 予定の時刻にそろえた時刻（個人の記録の欄の下に「→ 9:00」） */
+function snapText(x,f){return x.e&&x.e['s'+f]?'→ '+fmtClock(x.e[f])+'（予定）':'';}
+function snapTag(x,f){return '<span class="tc-snap" id="tcs'+f+'-'+x.k+'">'+snapText(x,f)+'</span>';}
 function tcRowCells(x,sid){
   return '<td id="tcb-'+x.k+'">'+tcBrkHTML(x,sid)+'</td><td id="tcn-'+x.k+'" class="big">'+tcNetHTML(x)+'</td><td id="tcp-'+x.k+'">'+tcPaidHTML(x,sid)+'</td>';
 }
@@ -2156,6 +2225,7 @@ function tcDetailRefresh(k,sid,skip){
   if(x){
     const tr=document.getElementById('tcr-'+k);if(tr&&(x.r||x.p)) tr.classList.remove('off');
     const n=$('#tcn-'+k);if(n) n.innerHTML=tcNetHTML(x);
+    ['i','o'].forEach(f=>{const e=document.getElementById('tcs'+f+'-'+k);if(e) e.textContent=snapText(x,f);});
     if(skip!=='b'){const b=$('#tcb-'+k);if(b) b.innerHTML=tcBrkHTML(x,sid);}
   }
   const s=staffById(sid);const m=Number(ym.split('-')[1]);
@@ -2192,8 +2262,8 @@ function viewTC(){
   const rows=p.rows.map(x=>{
     const plan=planOf(sc,sel.id,x);
     return '<tr id="tcr-'+x.k+'"'+(!x.r&&!plan&&!x.p&&!x.rp?' class="off"':'')+'><th scope="row">'+ymp[1]+'/'+x.d+'('+DOW[x.dow]+')</th>'+(HAS_ROSTER?'<td>'+plan+'</td>':'')
-      +'<td><input type="time" id="tci-'+x.k+'" aria-label="'+x.d+'日の出勤" data-chg="tcedit" data-k="i" data-day="'+x.k+'" data-sid="'+sel.id+'" value="'+timeVal(x.r&&x.r.i)+'"></td>'
-      +'<td><input type="time" id="tco-'+x.k+'" aria-label="'+x.d+'日の退勤" data-chg="tcedit" data-k="o" data-day="'+x.k+'" data-sid="'+sel.id+'" value="'+timeVal(x.r&&x.r.o)+'"></td>'
+      +'<td><input type="time" id="tci-'+x.k+'" aria-label="'+x.d+'日の出勤" data-chg="tcedit" data-k="i" data-day="'+x.k+'" data-sid="'+sel.id+'" value="'+timeVal(x.r&&x.r.i)+'">'+snapTag(x,'i')+'</td>'
+      +'<td><input type="time" id="tco-'+x.k+'" aria-label="'+x.d+'日の退勤" data-chg="tcedit" data-k="o" data-day="'+x.k+'" data-sid="'+sel.id+'" value="'+timeVal(x.r&&x.r.o)+'">'+snapTag(x,'o')+'</td>'
       +tcRowCells(x,sel.id)+'</tr>';
   }).join('');
   return '<div class="panel">'
@@ -2205,6 +2275,7 @@ function viewTC(){
     +'<section><h2>勤務時間の集計</h2>'
     +'<div class="rule"><label for="tc-brk">事業所の基本の休憩</label><input type="number" id="tc-brk" min="0" max="180" inputmode="numeric" data-chg="tcset" data-k="breakMin" value="'+esc(S.tc.breakMin)+'"><span>分（1日の勤務が</span><input type="number" id="tc-aft" min="0" max="12" inputmode="numeric" data-chg="tcset" data-k="breakAfterH" value="'+esc(S.tc.breakAfterH)+'" aria-label="何時間をこえた日か"><span>時間をこえた日に差し引きます）</span></div>'
     +'<p class="hint">勤務時間は「退勤 − 出勤 − 休憩」で、1分単位で計算します（切り捨てはしません）。休憩が人によってちがうときは、②職員の「ふだんの休憩」で決めます。日によってちがうときは、職員が退勤のときにえらぶか、下の「個人の記録」で直せます。その日の休憩をえらんだ日は、勤務の長さに関係なく、その休憩を差し引きます。</p>'
+    +tcSnapRule()
     +'<div class="row"><button type="button" class="btn primary big" data-act="tcsum">全員の勤務時間を集計する</button></div>'
     +snapHtml
     +'<p class="hint">タイムカードの記録は、法律で一定期間の保存が必要です。この端末の中だけにあるので、毎月CSVで保存しておくと安心です。</p></section>'
@@ -2448,7 +2519,7 @@ function tsPage(s,ym){
   const p=tcPerson(s.id,ym);const yp=ym.split('-').map(Number);const hol=holidaysOf(yp[0]);const sc=HAS_ROSTER?S.schedules[ym]:null;
   const rows=p.rows.map(x=>{
     const hn=hol[yp[1]+'-'+x.d];const cls=hn||x.dow===0?'sun':x.dow===6?'sat':'';const r=x.r;
-    const span=r?fmtClock(r.i)+' 〜 '+fmtClock(r.o):'';
+    const span=r?fmtClock(x.e.i)+' 〜 '+fmtClock(x.e.o):'';
     const notes=[r&&!x.c&&!isOpenToday(x.k,r)?'<span class="miss">打刻もれ</span>':'',r&&r.e?'修正':'',r&&r.a?'本人申請・承認':'',hn?esc(hn):''].filter(Boolean).join('・');
     return '<tr><th class="'+cls+'">'+x.d+'</th><td class="'+cls+'">'+DOW[x.dow]+'</td>'+(HAS_ROSTER?'<td>'+planOf(sc,s.id,x)+'</td>':'')
       +'<td>'+span+'</td><td>'+(x.c?fmtHM(x.c.brk):'')+'</td><td>'+(x.c?fmtHM(x.c.net):r&&isOpenToday(x.k,r)?'勤務中':'')+'</td>'
@@ -2468,7 +2539,7 @@ function tsPage(s,ym){
     +'<div><small>勤務時間の合計</small><b>'+fmtDur(p.min)+'</b><span>（'+(p.min/60).toFixed(2)+'時間）</span></div>'
     +'<div><small>有給</small><b>'+(p.paid?fmtPaid(p.paid):'なし')+'</b>'+(pd?'<span>'+pd+'</span>':'')+'</div>'
     +'<div><small>打刻もれ</small><b>'+(p.miss?p.miss+'件':'なし')+'</b></div></div>'
-    +'<p class="pg-foot"><span>勤務時間＝退勤−出勤−休憩（1分単位）。時刻は「時:分」。</span><span>'+todayStr()+' 作成</span></p></div>';
+    +'<p class="pg-foot"><span>勤務時間＝退勤−出勤−休憩（1分単位）。時刻は「時:分」。'+snapNote()+'</span><span>'+todayStr()+' 作成</span></p></div>';
 }
 function pdfName(kind){
   if(kind==='tcone'||kind==='tcall'){const ym=UI.tcym||curYm();const s=staffById(UI.tcsel);
@@ -2902,6 +2973,9 @@ const ACT={
   tcback(){UI.punched=null;renderMain();},
   tcmonth(v){const p=(UI.tcym||curYm()).split('-').map(Number);const dt=new Date(p[0],p[1]-1+Number(v),1);UI.tcym=dt.getFullYear()+'-'+pad(dt.getMonth()+1);renderMain();},
   tcsel(v){UI.tcsel=v;renderMain();const d=$('#tc-detail');if(d) d.scrollIntoView({block:'start'});},
+  tcsnap(v){const on=v==='1';if(!!S.tc.snap===on) return;S.tc.snap=on?1:0;S.punchAt=Date.now();save();renderMain();
+    const f=$('#tc-snaprule [data-act="tcsnap"][data-v="'+(on?1:0)+'"]');if(f) f.focus();
+    toast(on?'予定の時刻にそろえて計算します':'押したままの時刻で計算します');},
   tcsum(){
     const ym=UI.tcym||curYm();const rows=S.staff.map(s=>{const p=tcPerson(s.id,ym);return {sid:s.id,name:s.name,days:p.days,min:p.min,miss:p.miss,paid:p.paid,pd:p.pd};});
     const total={days:0,min:0,miss:0,paid:0};rows.forEach(r=>{total.days+=r.days;total.min+=r.min;total.miss+=r.miss;total.paid+=r.paid;});
@@ -2993,6 +3067,7 @@ const CHG={
     else if(k==='wh'){v=Math.round((parseFloat(v)||40)*100)/100;v=Math.min(80,Math.max(1,v));el.value=v;}
     kkConf()[k]=v;save();if(k==='svc') renderMain();},
   tcset(el){S.tc[el.dataset.k]=clampInt(el.value,el.min,el.max);el.value=S.tc[el.dataset.k];S.punchAt=Date.now();save();renderMain();},
+  tcsnapm(el){const v=Number(el.value);S.tc.snapM=SNAP_OPTS.indexOf(v)>=0?v:15;S.punchAt=Date.now();save();renderMain();const f=$('#tc-snapm');if(f) f.focus();},
   tcedit(el){
     const k=el.dataset.day,sid=el.dataset.sid;const day=S.punches[k]||(S.punches[k]={});const r=day[sid]||(day[sid]={i:null,o:null});
     r[el.dataset.k]=toMin(el.value);
